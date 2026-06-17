@@ -1,6 +1,10 @@
 ---
 name: "strategy-first-executor"
 description: "Wrap complex multi-step tasks with explicit strategy-first execution, checkpoint gating, and self-review."
+user-invocable: false
+disable-model-invocation: false
+metadata.openclaw:
+  requires: {}
 ---
 
 # Strategy-First Executor
@@ -13,7 +17,6 @@ Use for complex, multi-step tasks (3+ distinct steps, long-horizon, or high-risk
 - Task has 3+ distinct phases (research → analyze → output)
 - Task spans multiple sub-agent spawns that need coordination
 - Previous attempts showed drift, inconsistency, or forgetting
-- The user explicitly asks for a plan-first approach
 
 **Skip when:**
 - Single-step tasks
@@ -26,28 +29,24 @@ Use for complex, multi-step tasks (3+ distinct steps, long-horizon, or high-risk
 
 Before any action, analyze the task and output a strategy using `references/strategy-prompt.md`.
 
-Each constraint must be **verifiable** — a yes/no condition, not a guideline. See strategy format below.
+Each constraint must be **verifiable** — a yes/no condition, not a guideline. Optionally specify a **verification method** (tool call, script, manual check).
 
 ### Phase 2: Strategy-Guided Execution + Checkpoint Gating
 
 Execute the plan step by step. Before each action, note which phase this belongs to.
 
-**After every phase marked with a checkpoint in the strategy, run a checkpoint gate** using `references/checkpoint-gate-prompt.md`:
-- [PASS] → proceed to next phase
-- [FAIL] → fix the issue, then re-run the gate
-- [FAIL, strategy broken] → regenerate strategy from Phase 1
+**After every phase marked with a checkpoint, run a checkpoint gate** using `references/checkpoint-gate-prompt.md`:
+- PASS → proceed to next phase
+- FAIL → fix the issue, then re-run the gate
+- FAIL_STRATEGY → regenerate strategy from Phase 1
+
+If the checkpoint has a verification method (e.g., `exec: check.py`), run it before asking the model.
 
 Never proceed past a checkpoint that says FAIL.
-
-If an action fails or an intermediate result invalidates the strategy:
-- Adjust the strategy in-place if the goal is unchanged
-- If the strategy itself is fundamentally wrong, regenerate from Phase 1
 
 ### Phase 3: Final Self-Review
 
 After all phases complete, run a final self-review using `references/self-review-prompt.md`.
-
-Flag any step for manual review if it neither followed the strategy nor advanced the task.
 
 ## Strategy Format
 
@@ -57,19 +56,21 @@ Flag any step for manual review if it neither followed the strategy nor advanced
 [One sentence: definition of done]
 
 ### Constraints
-Must be checkable yes/no conditions. Bad: "be careful with durations". Good: "Phase 3 data-duration must equal TTS output value, deviation >0.1s = error".
-- [Verifiable constraint]
+Each constraint is a checkable yes/no condition. Add a verification method where a tool can check it.
+
+- [Verifiable constraint] → Verify with: [tool call or manual]
 - [Verifiable constraint]
 
 ### Execution Plan
-1. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [condition to verify]
-2. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [condition to verify]
+1. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
+   Verify with: [optional — exec, browser, manual]
+2. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
 
 ### Checkpoints
-- After Phase N: verify [specific measurable condition]
+- After Phase N: verify [condition]
 ```
 
-Phases without a checkpoint marker run without gating.
+Phases without 🔒 run without gating. Phases with `Verify with:` get objective checks before model judgment.
 
 ## Sub-agent Integration
 

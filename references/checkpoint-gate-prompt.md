@@ -10,9 +10,15 @@ The strategy requires this checkpoint to pass before proceeding:
 
 **Checkpoint:** {checkpoint_condition}
 
+**Verification method:** {verification_method}
+
 **What was produced in this phase:** {phase_output}
 
-Verify the checkpoint condition against what was actually produced. Respond with ONLY:
+**Step 1: Run verification if a tool is specified.**
+If the verification method is a tool call (e.g., `exec: python check.py`), run it now and capture the output.
+
+**Step 2: Judge the result.**
+Respond with ONLY:
 
 - `PASS` — the condition is met, proceed to next phase
 - `FAIL: <reason>` — the condition is not met, state what's missing/wrong
