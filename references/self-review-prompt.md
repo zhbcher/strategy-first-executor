@@ -1,40 +1,53 @@
 # Self-Review Prompt
 
-Use this prompt after ALL phases complete to verify end-to-end compliance against artifacts and journal.
+Use this prompt after ALL phases complete. Review against strategy, artifacts, and event journal.
 
 ---
 
-Review the completed execution against the original strategy, artifacts, and execution journal.
+**Run ID:** {run_id}
+**Strategy:** {strategy_path}
+**Manifest:** {manifest_path}
+**Journal:** {journal_path}
+**Artifacts:** {artifact_list}
 
-**Strategy:** {strategy_text}
+## Review
 
-**Execution Journal:** {journal_path}
+### 1. Artifact Chain Integrity
 
-**Output Artifacts:** {artifact_list}
+Verify the consume/output chain. For each phase:
+- Every `consume` artifact exists in `artifacts/`
+- Every `output` artifact was created
+- No broken links in the chain
 
-For each checkpoint in the strategy, verify whether it was met and produce evidence from artifacts or journal:
+### 2. Constraint Verification Summary
+
+From the journal, list every constraint and its final status:
+
+```
+- {constraint_id} ({type}): {passed/failed} — {evidence from journal}
+```
+
+### 3. Deviations
+
+Any action that neither followed the strategy nor advanced the task. Justified deviations (new information invalidated strategy) are OK.
+
+### 4. Verdict
 
 ```
 ## Final Self-Review
 
-### Checkpoint Verification
-- [x] / [ ] Phase N: {condition} — {status, evidence from artifact/journal}
-...
+### Artifact Chain
+- [chain_status]
 
-### Artifact Chain Integrity
-- Phase 1 → {output_file}: {exists/missing, status}
-- Phase 2 → reads {input_file} → writes {output_file}: {consistent/inconsistent}
-...
+### Constraints
+- [constraint_summary]
 
-### Deviations from Strategy
-For each step that did not follow the strategy:
-- Phase N: [what happened] → [should have been: ...]
+### Deviations
+- [list or "none"]
 
-### Unresolved Issues
-- [Anything that needs redo, follow-up, or manual attention]
+### Unresolved
+- [list or "none"]
 
 ### Verdict
-[PASS / NEEDS_FIX — with brief explanation]
+[PASS / NEEDS_FIX — explanation]
 ```
-
-A deviation is a step that **neither followed the strategy nor advanced the task**. If the deviation was justified (new information invalidated the strategy), mark as "justified deviation".

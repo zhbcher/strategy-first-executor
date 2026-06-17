@@ -1,58 +1,66 @@
 # Strategy Generation Prompt
 
-Use this prompt at the start of any strategy-first execution. The strategy will be saved as the execution plan and persisted across phases.
+Use this prompt at the start of every execution. Output strategy.yaml that the runtime will follow.
 
 ---
 
-You are about to execute a complex multi-step task. Before you begin, generate a comprehensive execution strategy.
+You are about to execute a complex multi-phase task. Before any action, generate a complete execution strategy.
 
 **Task:** {task_description}
 
 **Relevant Context:** {context}
 
-**Work directory:** {task_path}
+**Run ID:** {run_id}
+
+**Work directory:** .runs/{run_id}/
 
 Your strategy must declare:
-1. Concrete constraints — each verifiable (yes/no condition)
-2. Phase-by-phase execution plan — each phase declares its input artifact, output artifact, and checkpoint
-3. Checkpoints — gated, each phase must pass before the next begins
+1. **Goal** — one sentence: what success looks like
+2. **Constraints** — typed, verifiable. Each constraint has: id, type (metric|semantic|script|regex|tool), condition, verify method
+3. **Phases** — sequential. Each phase has: name, actions, consume (input artifacts), output (output artifacts), constraints (which constraint IDs to check)
 
-For numeric/machine-checkable conditions, use structured checkpoint format. For semantic conditions, use natural language.
+Output ONLY the strategy in this YAML format:
 
-Output ONLY the strategy in this format:
+```yaml
+goal: "One sentence definition of done"
 
-```
-## Strategy
+constraints:
+  - id: <constraint_id>
+    type: metric|semantic|script|regex|tool
+    condition: <description>
+    verify: <tool_call or "manual">
 
-### Goal
-[One sentence: what success looks like]
+  - id: <constraint_id>
+    type: semantic
+    condition: <description>
+    verify: manual
 
-### Constraints
-- [Verifiable condition] → Verify: [tool call or "manual"]
-- [Verifiable condition] → Verify: [tool call or "manual"]
+phases:
+  - name: <phase_name>
+    actions: "<specific actions, tools to use>"
+    consume: []
+    output: [<output_file>]
+    constraints: [<constraint_id>, ...]
 
-### Execution Plan
-
-#### Phase: <name>
-Actions: [specific actions, tools]
-Input: <file_path or null>
-Output: <file_path>
-🔒 Checkpoint:
-  condition: [natural language]
-  verify: ["manual" or tool call]
-
-#### Phase: <name>
-Actions: [specific actions, tools]
-Input: <previous_output_file>
-Output: <file_path>
-🔒 Checkpoint:
-  metric: <name>
-  operator: ">="
-  value: <number>
-  verify: exec: <script> <file_path>
-...
+  - name: <phase_name>
+    actions: "<specific actions>"
+    consume: [<previous_output_file>]
+    output: [<output_file>]
+    constraints: [<constraint_id>, ...]
 ```
 
-After outputting the strategy, save it and create `execution_state.json` at `{task_path}` with all phases set to `pending`.
+Rules:
+- First phase has `consume: []`
+- Every subsequent phase consumes at least one artifact from prior phases
+- Numeric checks use `metric` type with script verification
+- Format/quality checks use `semantic` type
+- File pattern checks use `regex` type
+- External validation uses `tool` type
 
-Do not execute any actions yet.
+After outputting the strategy:
+1. Save as `.runs/{run_id}/strategy.yaml`
+2. Create `.runs/{run_id}/manifest.json` with run metadata
+3. Create `.runs/{run_id}/journal.jsonl` with `run_started` event
+4. Create `.runs/{run_id}/artifacts/` directory
+
+Do not execute any phase actions yet.
