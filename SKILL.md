@@ -1,9 +1,6 @@
 ---
 name: "strategy-first-executor"
 description: "Recoverable, verifiable, resumable Task Runtime for multi-phase agentic execution on OpenClaw."
-status: proposal
-version: "v1"
-date: "2026-06-17T13:16:30.245Z"
 user-invocable: false
 disable-model-invocation: false
 metadata.openclaw:
