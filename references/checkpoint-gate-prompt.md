@@ -1,6 +1,6 @@
 # Checkpoint Gate Prompt
 
-Use this prompt at every checkpoint between phases. Never proceed past a FAIL.
+Use this prompt at every checkpoint. Never proceed past a FAIL. Policy violations are terminal.
 
 ---
 
@@ -9,7 +9,9 @@ Use this prompt at every checkpoint between phases. Never proceed past a FAIL.
 **Output artifacts:** {artifact_list}
 **Next phase consume:** {next_consume_list}
 
-## Constraints to Verify
+**Policy:** max_retry={max_retry} (current={retry_count}), max_replan={max_replan} (current={replan_count}), phase_timeout={phase_timeout}
+
+## Constraints
 
 {constraints_block}
 
@@ -17,47 +19,73 @@ Use this prompt at every checkpoint between phases. Never proceed past a FAIL.
 
 ## Protocol
 
-### 1. For each constraint
-
-| Constraint Type | Action |
-|----------------|--------|
-| `metric` | Run the verify tool NOW. Parse output. Judge based on tool result, not opinion. |
-| `script` | Run the verify script NOW. Judge based on exit code + stdout. |
-| `regex` | Run the verify command NOW. Judge based on match/no-match. |
-| `tool` | Execute the OpenClaw tool call NOW. Judge based on tool output. |
-| `semantic` | Read the output artifact. Judge based on the condition vs artifact contents. |
-
-### 2. For each constraint, respond with ONE line
+### Step 0: Policy Check (BEFORE verification)
 
 ```
-CONSTRAINT {constraint_id}: PASS
+If retry_count >= max_retry:
+  Write: {"event":"policy_violation","run_id":"{run_id}","phase":"{phase_name}","violation":"max_retry","limit":{max_retry},"actual":{retry_count},"timestamp":"<now>"}
+  Respond: POLICY_VIOLATION: max_retry ({max_retry}) exceeded. Run terminated.
+  STOP
+
+If replan_count >= max_replan:
+  Write: {"event":"policy_violation","run_id":"{run_id}","phase":"{phase_name}","violation":"max_replan","limit":{max_replan},"actual":{replan_count},"timestamp":"<now>"}
+  Respond: POLICY_VIOLATION: max_replan ({max_replan}) exceeded. Run terminated.
+  STOP
 ```
+
+### Step 1: Consume Verification
+
 ```
-CONSTRAINT {constraint_id}: FAIL — <specific reason, what is missing/wrong>
+For each file in next_consume_list:
+  Check: declared in manifest? + exists on filesystem?
+  
+  If ANY missing:
+    Write: {"event":"consume_validation_failed","run_id":"{run_id}","phase":"<next_phase>","missing":["<files>"],"timestamp":"<now>"}
+    Respond: CONSUME_VALIDATION_FAILED: missing [<files>]. Run terminated.
+    STOP
+
+  All present:
+    Write: {"event":"consume_verified","run_id":"{run_id}","phase":"<next_phase>","artifacts":["<files>"],"timestamp":"<now>"}
 ```
 
-### 3. After ALL constraints are evaluated
+### Step 2: Constraint Verification
 
-If ALL PASS:
-- Write `phase_completed` event to `.runs/{run_id}/journal.jsonl`
-- Proceed to next phase
+| Type | Action |
+|------|--------|
+| `metric` | Run the verify tool. Judge based on tool output. |
+| `script` | Run the verify script. Judge based on exit code + stdout. |
+| `regex` | Run the verify command. Judge based on match/no-match. |
+| `tool` | Execute the OpenClaw tool call. Judge based on tool output. |
+| `semantic` | Read the output artifact. Judge based on condition vs contents. |
 
-If ANY FAIL:
-- Write `checkpoint_failed` event with failing constraint IDs
-- Fix the issues
-- Re-run this gate from scratch
+Respond per constraint:
 
-If FAIL_STRATEGY (strategy itself is wrong):
-- Write `strategy_invalidated` event
-- Regenerate strategy from scratch
+```
+CONSTRAINT {id}: PASS
+CONSTRAINT {id}: FAIL — <reason>
+```
 
-### 4. Journal events to emit
+### Step 3: Outcome
 
-```jsonl
-{"event":"checkpoint_passed","run_id":"{run_id}","phase":"{phase_name}","constraint":"{constraint_id}","evidence":"<tool output or reason>","timestamp":"ISO8601"}
-{"event":"checkpoint_failed","run_id":"{run_id}","phase":"{phase_name}","constraint":"{constraint_id}","reason":"<reason>","timestamp":"ISO8601"}
-{"event":"phase_completed","run_id":"{run_id}","phase":"{phase_name}","timestamp":"ISO8601"}
-{"event":"strategy_invalidated","run_id":"{run_id}","phase":"{phase_name}","reason":"<reason>","timestamp":"ISO8601"}
+**ALL PASS:**
+```
+Write checkpoint_passed events
+Write phase_completed event
+Proceed to next phase
+```
+
+**ANY FAIL:**
+```
+retry_count++
+Write checkpoint_failed event(s)
+Fix issues. Re-run from Step 0.
+```
+
+**FAIL_STRATEGY:**
+```
+replan_count++
+Write strategy_invalidated event
+Regenerate strategy from Phase 1
 ```
 
 Do not discuss. Execute the protocol.

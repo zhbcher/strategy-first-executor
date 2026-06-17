@@ -1,11 +1,12 @@
 # Self-Review Prompt
 
-Use this prompt after ALL phases complete. Review against strategy, artifacts, and event journal.
+Use this prompt after ALL phases complete.
 
 ---
 
 **Run ID:** {run_id}
 **Strategy:** {strategy_path}
+**Policy:** {policy_path}
 **Manifest:** {manifest_path}
 **Journal:** {journal_path}
 **Artifacts:** {artifact_list}
@@ -14,33 +15,41 @@ Use this prompt after ALL phases complete. Review against strategy, artifacts, a
 
 ### 1. Artifact Chain Integrity
 
-Verify the consume/output chain. For each phase:
-- Every `consume` artifact exists in `artifacts/`
-- Every `output` artifact was created
-- No broken links in the chain
+For each phase, verify: every `consume` artifact exists, every `output` artifact created.
 
-### 2. Constraint Verification Summary
+### 2. Constraint Summary
 
-From the journal, list every constraint and its final status:
+From journal, list each constraint and final status:
 
 ```
-- {constraint_id} ({type}): {passed/failed} — {evidence from journal}
+- {constraint_id} ({type}): {passed/failed} — {evidence}
 ```
 
-### 3. Deviations
+### 3. Policy Compliance
 
-Any action that neither followed the strategy nor advanced the task. Justified deviations (new information invalidated strategy) are OK.
+Check for policy_violation events:
 
-### 4. Verdict
+```
+- Policy violations: [none / list]
+```
+
+### 4. Deviations
+
+Actions that neither followed strategy nor advanced task.
+
+### 5. Verdict
 
 ```
 ## Final Self-Review
 
 ### Artifact Chain
-- [chain_status]
+- [status]
 
 ### Constraints
-- [constraint_summary]
+- [summary]
+
+### Policy
+- [status]
 
 ### Deviations
 - [list or "none"]
@@ -49,5 +58,5 @@ Any action that neither followed the strategy nor advanced the task. Justified d
 - [list or "none"]
 
 ### Verdict
-[PASS / NEEDS_FIX — explanation]
+[PASS / NEEDS_FIX]
 ```

@@ -16,8 +16,8 @@ You are about to execute a complex multi-phase task. Before any action, generate
 
 Your strategy must declare:
 1. **Goal** — one sentence: what success looks like
-2. **Constraints** — typed, verifiable. Each constraint has: id, type (metric|semantic|script|regex|tool), condition, verify method
-3. **Phases** — sequential. Each phase has: name, actions, consume (input artifacts), output (output artifacts), constraints (which constraint IDs to check)
+2. **Constraints** — typed, verifiable. Each has: id, type (metric|semantic|script|regex|tool), condition, verify method
+3. **Phases** — sequential. Each has: name, actions, consume (input artifacts), output (output artifacts), constraints
 
 Output ONLY the strategy in this YAML format:
 
@@ -29,11 +29,6 @@ constraints:
     type: metric|semantic|script|regex|tool
     condition: <description>
     verify: <tool_call or "manual">
-
-  - id: <constraint_id>
-    type: semantic
-    condition: <description>
-    verify: manual
 
 phases:
   - name: <phase_name>
@@ -55,12 +50,12 @@ Rules:
 - Numeric checks use `metric` type with script verification
 - Format/quality checks use `semantic` type
 - File pattern checks use `regex` type
-- External validation uses `tool` type
 
 After outputting the strategy:
 1. Save as `.runs/{run_id}/strategy.yaml`
-2. Create `.runs/{run_id}/manifest.json` with run metadata
-3. Create `.runs/{run_id}/journal.jsonl` with `run_started` event
-4. Create `.runs/{run_id}/artifacts/` directory
+2. Write `policy.yaml` with defaults: max_retry=3, max_replan=2, phase_timeout=30m, max_total_runtime=120m
+3. Create `manifest.json` with run metadata
+4. Create `journal.jsonl` with `run_started` event
+5. Create `artifacts/` directory
 
 Do not execute any phase actions yet.
