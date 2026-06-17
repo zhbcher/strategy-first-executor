@@ -1,6 +1,6 @@
 # Self-Review Prompt
 
-Use this prompt after completing strategy-guided execution to verify compliance and catch errors.
+Use this prompt after ALL phases complete to verify end-to-end compliance and catch errors.
 
 ---
 
@@ -15,11 +15,11 @@ Review your completed execution against the original strategy below.
 For each checkpoint in the strategy, verify whether it was met:
 
 ```
-## Self-Review
+## Final Self-Review
 
 ### Checkpoint Verification
-- [x] / [ ] Checkpoint 1 — [status, evidence]
-- [x] / [ ] Checkpoint 2 — [status, evidence]
+- [x] / [ ] Phase N Checkpoint — [status, evidence]
+- [x] / [ ] Phase M Checkpoint — [status, evidence]
 ...
 
 ### Deviations from Strategy

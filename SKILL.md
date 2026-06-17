@@ -1,6 +1,6 @@
 ---
 name: "strategy-first-executor"
-description: "Wrap complex multi-step tasks with explicit strategy-first execution and optional self-review."
+description: "Wrap complex multi-step tasks with explicit strategy-first execution, checkpoint gating, and self-review."
 ---
 
 # Strategy-First Executor
@@ -26,17 +26,26 @@ Use for complex, multi-step tasks (3+ distinct steps, long-horizon, or high-risk
 
 Before any action, analyze the task and output a strategy using `references/strategy-prompt.md`.
 
-### Phase 2: Strategy-Guided Execution
+Each constraint must be **verifiable** — a yes/no condition, not a guideline. See strategy format below.
 
-Execute the plan step by step. Before each action, note which phase of the strategy this belongs to.
+### Phase 2: Strategy-Guided Execution + Checkpoint Gating
+
+Execute the plan step by step. Before each action, note which phase this belongs to.
+
+**After every phase marked with a checkpoint in the strategy, run a checkpoint gate** using `references/checkpoint-gate-prompt.md`:
+- [PASS] → proceed to next phase
+- [FAIL] → fix the issue, then re-run the gate
+- [FAIL, strategy broken] → regenerate strategy from Phase 1
+
+Never proceed past a checkpoint that says FAIL.
 
 If an action fails or an intermediate result invalidates the strategy:
-- Adjust the strategy in-place (no need to restart from scratch if the goal is unchanged)
+- Adjust the strategy in-place if the goal is unchanged
 - If the strategy itself is fundamentally wrong, regenerate from Phase 1
 
-### Phase 3: Self-Review
+### Phase 3: Final Self-Review
 
-After execution, run a self-review against the strategy using `references/self-review-prompt.md`.
+After all phases complete, run a final self-review using `references/self-review-prompt.md`.
 
 Flag any step for manual review if it neither followed the strategy nor advanced the task.
 
@@ -48,15 +57,19 @@ Flag any step for manual review if it neither followed the strategy nor advanced
 [One sentence: definition of done]
 
 ### Constraints
-- [Hard rules, format requirements, must-not-do items]
+Must be checkable yes/no conditions. Bad: "be careful with durations". Good: "Phase 3 data-duration must equal TTS output value, deviation >0.1s = error".
+- [Verifiable constraint]
+- [Verifiable constraint]
 
 ### Execution Plan
-1. [Phase name] — [what to do, tools, expected output]
-2. [Phase name] — [what to do, tools, expected output]
+1. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [condition to verify]
+2. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [condition to verify]
 
 ### Checkpoints
-- After step N: verify [condition]
+- After Phase N: verify [specific measurable condition]
 ```
+
+Phases without a checkpoint marker run without gating.
 
 ## Sub-agent Integration
 
@@ -67,5 +80,5 @@ When spawning sub-agents for parallel work:
 
 ## References
 
-- Prompt templates: `references/strategy-prompt.md`, `references/self-review-prompt.md`
+- Prompt templates: `references/strategy-prompt.md`, `references/checkpoint-gate-prompt.md`, `references/self-review-prompt.md`
 - StraTA paper: arxiv.org/abs/2605.06642 — the RL training framework this inference pattern is derived from
