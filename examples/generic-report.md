@@ -1,67 +1,76 @@
 # Example: Multi-source Research Report
 
-A generic end-to-end example showing the full strategy → execute → gate → review loop.
+A generic end-to-end example showing full strategy → artifact → gate → journal loop.
 
 ## Task
-> Research the current state of solid-state batteries, covering key players, technical challenges, and market outlook. Output a structured report.
+> Research solid-state batteries: key players, technical challenges, market outlook. Output report.md.
 
 ## Phase 1: Strategy Output
 
 ```
 ## Strategy
 ### Goal
-Produce a structured research report on solid-state batteries with three sections:
-key players, technical challenges, market outlook.
+Produce report.md on solid-state batteries (3 sections, all claims cited, ≤1500 words)
 
 ### Constraints
-- All claims must cite a source (URL or paper title)
-- Report format: markdown with H2 sections, max 1500 words
-- No speculation beyond cited sources
+- All claims must cite a source → Verify: manual
+- Word count ≤ 1500 → Verify: exec: wc -w report.md
 
 ### Execution Plan
-1. Research → web_search for each section topic, collect 3+ sources per section
-   🔒 Checkpoint: have ≥3 relevant sources per section, all with URLs
-2. Draft → write each section, cite sources inline
-   🔒 Checkpoint: every claim has a citation, word count ≤1500
-3. Polish → check formatting, fix broken citations, final read-through
-   🔒 Checkpoint: valid markdown, no placeholder text, all URLs accessible
 
-### Checkpoints
-- After Phase 1: ≥3 sources per section
-- After Phase 2: all claims cited, within word limit
-- After Phase 3: markdown valid, no placeholders
+#### Phase: research
+Actions: web_search for each section topic, collect 3+ sources per section
+Input: null
+Output: research.json
+🔒 Checkpoint:
+  metric: source_count
+  operator: ">="
+  value: 9
+  verify: exec: python -c "import json; d=json.load(open('research.json')); print(len(d['sources']))"
+
+#### Phase: draft
+Actions: read research.json, write draft.md with citations
+Input: research.json
+Output: draft.md
+🔒 Checkpoint:
+  condition: every claim has a citation, word count ≤ 1500
+  verify: manual
+
+#### Phase: polish
+Actions: fix formatting, check URLs, final read-through
+Input: draft.md
+Output: report.md
+🔒 Checkpoint:
+  condition: valid markdown, no placeholders, all URLs accessible
+  verify: manual
 ```
 
-## Phase 2 Checkpoint Gate (between Research and Draft)
+## execution_state.json (after Phase 1)
+
+```json
+{
+  "task": "Research solid-state batteries",
+  "strategy": "...",
+  "phases": {
+    "research": {"status": "passed", "artifact": "research.json", "updated_at": "2026-06-17T12:00:00Z"},
+    "draft": {"status": "running", "artifact": null, "updated_at": "2026-06-17T12:00:01Z"},
+    "polish": {"status": "pending", "artifact": null, "updated_at": null}
+  }
+}
+```
+
+## execution_journal.jsonl
+
+```jsonl
+{"phase":"research","action":"web_search","result":"success","evidence":"5 results","timestamp":"2026-06-17T11:59:00Z"}
+{"phase":"research","action":"web_search","result":"success","evidence":"4 results","timestamp":"2026-06-17T11:59:30Z"}
+{"phase":"research","action":"checkpoint_gate","result":"pass","evidence":"source_count=9","timestamp":"2026-06-17T12:00:00Z"}
+{"phase":"draft","action":"read_artifact","result":"success","evidence":"research.json loaded","timestamp":"2026-06-17T12:00:05Z"}
+```
+
+## Checkpoint Gate (research → draft)
 
 ```
 PASS
 ```
-→ 9 sources collected (3 per section), all with URLs. Proceeding to draft.
-
-## Phase 3 Checkpoint Gate (between Draft and Polish)
-
-```
-FAIL: Section "Market Outlook" has 2 claims without citations.
-```
-→ Agent fixes citations, re-runs gate → PASS. Proceeds.
-
-## Phase 3: Final Self-Review
-
-```
-## Final Self-Review
-
-### Checkpoint Verification
-- [x] Phase 1 — 9 sources, 3 per section
-- [x] Phase 2 — all claims cited, 1420 words
-- [x] Phase 3 — valid markdown, no placeholders
-
-### Deviations
-None
-
-### Unresolved Issues
-None
-
-### Verdict
-PASS
-```
+→ Tool output: `9`. ≥9 → pass. Journal appended. State updated. Proceed to draft.

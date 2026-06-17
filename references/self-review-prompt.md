@@ -1,30 +1,34 @@
 # Self-Review Prompt
 
-Use this prompt after ALL phases complete to verify end-to-end compliance and catch errors.
+Use this prompt after ALL phases complete to verify end-to-end compliance against artifacts and journal.
 
 ---
 
-Review your completed execution against the original strategy below.
+Review the completed execution against the original strategy, artifacts, and execution journal.
 
-**Original Strategy:**
-{strategy_text}
+**Strategy:** {strategy_text}
 
-**Execution Log:**
-{execution_log}
+**Execution Journal:** {journal_path}
 
-For each checkpoint in the strategy, verify whether it was met:
+**Output Artifacts:** {artifact_list}
+
+For each checkpoint in the strategy, verify whether it was met and produce evidence from artifacts or journal:
 
 ```
 ## Final Self-Review
 
 ### Checkpoint Verification
-- [x] / [ ] Phase N Checkpoint — [status, evidence]
-- [x] / [ ] Phase M Checkpoint — [status, evidence]
+- [x] / [ ] Phase N: {condition} — {status, evidence from artifact/journal}
+...
+
+### Artifact Chain Integrity
+- Phase 1 → {output_file}: {exists/missing, status}
+- Phase 2 → reads {input_file} → writes {output_file}: {consistent/inconsistent}
 ...
 
 ### Deviations from Strategy
 For each step that did not follow the strategy:
-- Step N: [what happened] → [should have been: ...]
+- Phase N: [what happened] → [should have been: ...]
 
 ### Unresolved Issues
 - [Anything that needs redo, follow-up, or manual attention]
@@ -33,4 +37,4 @@ For each step that did not follow the strategy:
 [PASS / NEEDS_FIX — with brief explanation]
 ```
 
-A step is a deviation if it **neither followed the strategy nor advanced the task toward the goal**. If the deviation was justified (new information made the strategy outdated), note it as "justified deviation" rather than "error".
+A deviation is a step that **neither followed the strategy nor advanced the task**. If the deviation was justified (new information invalidated the strategy), mark as "justified deviation".

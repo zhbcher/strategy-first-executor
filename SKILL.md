@@ -9,77 +9,175 @@ metadata.openclaw:
 
 # Strategy-First Executor
 
-Use for complex, multi-step tasks (3+ distinct steps, long-horizon, or high-risk) where reactive step-by-step execution tends to drift. Inspired by the StraTA framework (arxiv 2605.06642).
+Reliable multi-phase task execution with explicit strategy, state persistence, artifact chains, checkpoint gating, and structured journaling. Inspired by the StraTA framework (arxiv 2605.06642).
 
 ## When to Apply
 
-**Apply this pattern when:**
 - Task has 3+ distinct phases (research → analyze → output)
 - Task spans multiple sub-agent spawns that need coordination
+- Task may be interrupted and needs resumability
 - Previous attempts showed drift, inconsistency, or forgetting
 
-**Skip when:**
-- Single-step tasks
-- Trivial tasks the model handles reliably without planning
-- Tasks where the strategy is obvious from context
+Skip for single-step or trivial tasks.
+
+## Architecture
+
+```
+Task
+ ↓
+Resume Check (execution_state.json)
+ ↓
+Strategy Generator (Phase 0)
+ ↓  writes execution_state.json
+Execution (Phase 1→N)
+ ├─ Read input artifact(s)
+ ├─ Execute actions
+ ├─ Write output artifact
+ ├─ Checkpoint Gate (tool verify → PASS/FAIL/FAIL_STRATEGY)
+ ├─ Update execution_state.json
+ └─ Append execution_journal.jsonl
+ ↓
+Final Self-Review (Phase N+1)
+```
+
+## Key Design Decisions
+
+### State Persistence
+
+Every phase writes `execution_state.json` to a fixed path. Resume from this file on restart.
+
+### Artifact Chain
+
+Phases do NOT communicate through context. Each phase declares inputs and outputs:
+
+```
+Phase 1 → research.json
+Phase 2 → reads research.json → writes draft.md
+Phase 3 → reads draft.md → writes final.md
+```
+
+### Structured Checkpoints
+
+Numeric/machine-checkable checkpoints use structured format. Semantic checkpoints use natural language.
+
+### Execution Journal
+
+Every action appends to `execution_journal.jsonl`. Recoverable, debuggable, auditable.
 
 ## Workflow
 
+### Phase 0: Resume Check
+
+1. Check if `<task_path>/execution_state.json` exists
+2. If yes, read current state, skip completed phases, resume from first `running` or `failed` phase
+3. If no, proceed to Strategy Generation
+
 ### Phase 1: Strategy Generation
 
-Before any action, analyze the task and output a strategy using `references/strategy-prompt.md`.
+Generate and save strategy using `references/strategy-prompt.md`. Write `execution_state.json` with all phases `pending`.
 
-Each constraint must be **verifiable** — a yes/no condition, not a guideline. Optionally specify a **verification method** (tool call, script, manual check).
+### Phase 2: Execution Loop
 
-### Phase 2: Strategy-Guided Execution + Checkpoint Gating
+For each phase:
 
-Execute the plan step by step. Before each action, note which phase this belongs to.
-
-**After every phase marked with a checkpoint, run a checkpoint gate** using `references/checkpoint-gate-prompt.md`:
-- PASS → proceed to next phase
-- FAIL → fix the issue, then re-run the gate
-- FAIL_STRATEGY → regenerate strategy from Phase 1
-
-If the checkpoint has a verification method (e.g., `exec: check.py`), run it before asking the model.
-
-Never proceed past a checkpoint that says FAIL.
+1. Read input artifacts from previous phases
+2. Execute actions
+3. **Write output artifact** to declared path
+4. Run checkpoint gate via `references/checkpoint-gate-prompt.md`
+5. If `Verify: <tool_call>` is specified, run it before judging
+6. Update `execution_state.json`
+7. Append to `execution_journal.jsonl`
+8. FAIL → fix and re-run gate. FAIL_STRATEGY → regenerate from Phase 1
 
 ### Phase 3: Final Self-Review
 
-After all phases complete, run a final self-review using `references/self-review-prompt.md`.
+After all phases, run `references/self-review-prompt.md`. Review against journal and artifacts.
+
+## File Convention
+
+All paths relative to `<task_path>/`:
+
+```
+task_path/
+├── execution_state.json      # Phase status + artifact refs
+├── execution_journal.jsonl   # Append-only action log
+├── <phase_1_output>          # Declared in strategy
+├── <phase_2_output>
+└── ...
+```
+
+### execution_state.json
+
+```json
+{
+  "task": "task description",
+  "strategy": "full strategy text",
+  "phases": {
+    "research": {"status": "passed", "artifact": "research.json", "updated_at": "..."},
+    "draft": {"status": "running", "artifact": null, "updated_at": "..."},
+    "polish": {"status": "pending", "artifact": null, "updated_at": null}
+  },
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Status values: `pending | running | passed | failed | skipped`
+
+### execution_journal.jsonl
+
+Append-only, one line per action:
+
+```jsonl
+{"phase":"research","action":"web_search","result":"success","evidence":"9 results","timestamp":"..."}
+{"phase":"research","action":"checkpoint_gate","result":"pass","evidence":"source_count=9","timestamp":"..."}
+```
 
 ## Strategy Format
 
 ```
 ## Strategy
+
 ### Goal
 [One sentence: definition of done]
 
 ### Constraints
-Each constraint is a checkable yes/no condition. Add a verification method where a tool can check it.
-
-- [Verifiable constraint] → Verify with: [tool call or manual]
-- [Verifiable constraint]
+- [Verifiable condition] → Verify: [tool call, script, or "manual"]
 
 ### Execution Plan
-1. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
-   Verify with: [optional — exec, browser, manual]
-2. [Phase name] — [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
 
-### Checkpoints
-- After Phase N: verify [condition]
+#### Phase: <name>
+Actions: [what to do, tools to use]
+Input: <previous_phase_output or null>
+Output: <this_phase_output_path>
+🔒 Checkpoint:
+  condition: [natural language for semantic, structured for numeric]
+  verify: [tool call if applicable, or "manual"]
+
+#### Phase: <name>
+...
 ```
 
-Phases without 🔒 run without gating. Phases with `Verify with:` get objective checks before model judgment.
+**Structured checkpoint format** (for numeric/machine-checkable conditions):
+
+```yaml
+🔒 Checkpoint:
+  metric: <metric_name>
+  operator: ">=" | "<=" | "==" | "!=" | ">"
+  value: <number>
+  verify: exec: <script_path> <artifact_path>
+```
 
 ## Sub-agent Integration
 
 When spawning sub-agents for parallel work:
-- Inject the strategy into each sub-agent's task definition
-- Each sub-agent reports back mapped to a specific phase
-- The orchestrating agent aggregates outputs against the strategy
+- Inject the strategy + execution_state.json into each sub-agent
+- Each sub-agent writes its own artifact, updates a shared journal
+- Orchestrator aggregates artifacts and runs final review
 
 ## References
 
-- Prompt templates: `references/strategy-prompt.md`, `references/checkpoint-gate-prompt.md`, `references/self-review-prompt.md`
-- StraTA paper: arxiv.org/abs/2605.06642 — the RL training framework this inference pattern is derived from
+- `references/strategy-prompt.md` — strategy generation with artifact declarations
+- `references/checkpoint-gate-prompt.md` — checkpoint verification with tool support
+- `references/self-review-prompt.md` — final review against journal + artifacts
+- StraTA paper: arxiv.org/abs/2605.06642

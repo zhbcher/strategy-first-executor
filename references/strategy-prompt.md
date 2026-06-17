@@ -1,23 +1,23 @@
 # Strategy Generation Prompt
 
-Use this prompt at the start of any strategy-first execution.
+Use this prompt at the start of any strategy-first execution. The strategy will be saved as the execution plan and persisted across phases.
 
 ---
 
-You are about to execute a complex multi-step task. Before you begin, generate a comprehensive strategy that will guide every subsequent action.
+You are about to execute a complex multi-step task. Before you begin, generate a comprehensive execution strategy.
 
 **Task:** {task_description}
 
 **Relevant Context:** {context}
 
-Your strategy must be:
-1. **Concrete** — future actions can be checked against it step by step
-2. **Practical** — based only on known information, no guessing future data
-3. **Complete** — covers the full task from start to finish
+**Work directory:** {task_path}
 
-**Constraints must be verifiable.** Each constraint must be a yes/no condition. If a tool or script can objectively verify it, specify the verification method. Bad: "be careful with X". Good: "output value must equal reference value, deviation >0.1s = error. Verify with: exec: python compare.py".
+Your strategy must declare:
+1. Concrete constraints — each verifiable (yes/no condition)
+2. Phase-by-phase execution plan — each phase declares its input artifact, output artifact, and checkpoint
+3. Checkpoints — gated, each phase must pass before the next begins
 
-**Checkpoints must be gated.** Every key phase transition must have a checkpoint. The agent will not proceed past a checkpoint until it passes.
+For numeric/machine-checkable conditions, use structured checkpoint format. For semantic conditions, use natural language.
 
 Output ONLY the strategy in this format:
 
@@ -28,17 +28,31 @@ Output ONLY the strategy in this format:
 [One sentence: what success looks like]
 
 ### Constraints
-- [Verifiable yes/no condition] → Verify with: [tool call, script path, or "manual"]
-- [Verifiable yes/no condition]
+- [Verifiable condition] → Verify: [tool call or "manual"]
+- [Verifiable condition] → Verify: [tool call or "manual"]
 
 ### Execution Plan
-1. [Phase name] → [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
-2. [Phase name] → [actions, tools, expected output] 🔒 Checkpoint: [verifiable condition]
-...
 
-### Checkpoints
-- After Phase N: verify [condition]
-- After Phase M: verify [condition]
+#### Phase: <name>
+Actions: [specific actions, tools]
+Input: <file_path or null>
+Output: <file_path>
+🔒 Checkpoint:
+  condition: [natural language]
+  verify: ["manual" or tool call]
+
+#### Phase: <name>
+Actions: [specific actions, tools]
+Input: <previous_output_file>
+Output: <file_path>
+🔒 Checkpoint:
+  metric: <name>
+  operator: ">="
+  value: <number>
+  verify: exec: <script> <file_path>
+...
 ```
 
-Do not execute any actions yet. Output only the strategy.
+After outputting the strategy, save it and create `execution_state.json` at `{task_path}` with all phases set to `pending`.
+
+Do not execute any actions yet.

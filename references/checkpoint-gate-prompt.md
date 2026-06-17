@@ -1,27 +1,57 @@
 # Checkpoint Gate Prompt
 
-Use this prompt at every checkpoint between execution phases. Do not proceed past a FAIL.
+Use this prompt at every checkpoint between phases. Never proceed past a FAIL.
 
 ---
 
-You have completed Phase {phase_number}: {phase_name}.
+You have completed Phase: **{phase_name}**.
 
-The strategy requires this checkpoint to pass before proceeding:
-
-**Checkpoint:** {checkpoint_condition}
+**Checkpoint condition:** {checkpoint_condition}
 
 **Verification method:** {verification_method}
 
-**What was produced in this phase:** {phase_output}
+**Output artifact:** {artifact_path}
 
-**Step 1: Run verification if a tool is specified.**
-If the verification method is a tool call (e.g., `exec: python check.py`), run it now and capture the output.
+**Expected input for next phase:** {next_phase_input}
 
-**Step 2: Judge the result.**
-Respond with ONLY:
+## Protocol
 
-- `PASS` — the condition is met, proceed to next phase
-- `FAIL: <reason>` — the condition is not met, state what's missing/wrong
-- `FAIL_STRATEGY: <reason>` — the strategy itself is invalid given new information
+1. **If verification method is a tool call** (e.g., `exec: python check.py artifact.json`):
+   - Run the tool NOW
+   - Capture its output as evidence
+   - Judge PASS/FAIL based on the tool output, not your opinion
 
-Do not discuss. Do not suggest fixes. Answer with PASS, FAIL, or FAIL_STRATEGY only.
+2. **If verification is "manual"**:
+   - Read the output artifact
+   - Judge PASS/FAIL based on the checkpoint condition vs artifact contents
+
+3. **Respond with ONE line only**:
+
+```
+PASS
+```
+
+```
+FAIL: <specific reason, what is missing/wrong>
+```
+
+```
+FAIL_STRATEGY: <why the strategy itself is no longer valid>
+```
+
+4. **After PASS**:
+   - Mark phase as `passed` in `execution_state.json`
+   - Set next phase to `running`
+   - Append to `execution_journal.jsonl`: `{"phase":"{phase_name}","action":"checkpoint_gate","result":"pass","evidence":"<evidence>","timestamp":"<now>"}`
+   - Proceed to next phase
+
+5. **After FAIL**:
+   - Fix the issue
+   - Re-run this gate
+   - Do NOT mark the phase as passed until the gate passes
+
+6. **After FAIL_STRATEGY**:
+   - Regenerate strategy from scratch
+   - Reset all phase states
+
+Do not discuss. Do not suggest fixes outside the fix loop. Execute the protocol.
