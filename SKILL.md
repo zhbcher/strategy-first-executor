@@ -1,6 +1,9 @@
 ---
 name: "strategy-first-executor"
 description: "Recoverable, verifiable, resumable Task Runtime for multi-phase agentic execution on OpenClaw."
+status: proposal
+version: "v1"
+date: "2026-06-17T13:16:30.245Z"
 user-invocable: false
 disable-model-invocation: false
 metadata.openclaw:
@@ -79,13 +82,13 @@ All architectural decisions are recorded in `references/decisions.md` (ADR forma
 
 1. Generate `run_id` (timestamp-based)
 2. Create `.runs/<run_id>/` directory structure
-3. If `.runs/<run_id>/manifest.json` exists → resume from last incomplete phase
+3. If `.runs/<run_id>/manifest.json` exists → resume (see Interrupt Recovery Protocol below)
 4. Otherwise → proceed to Strategy Generation
 
 ### Phase 1: Strategy + Policy Generation
 
 1. Generate strategy using `references/strategy-prompt.md`, save as `strategy.yaml`
-2. Write `policy.yaml` with default bounds (see `references/policy.md`)
+2. Write `policy.yaml` (see `references/policy.md`)
 3. Write `manifest.json`
 4. Append `run_started` event to journal
 
@@ -108,9 +111,30 @@ For each phase:
 1. Run checkpoint gate via `references/checkpoint-gate-prompt.md`
 2. Gate tracks retry/replan counts against `policy.yaml`
 3. On FAIL: fix, increment retry_count, re-run gate
-4. On FAIL_STRATEGY: increment replan_count, regenerate strategy
+4. On FAIL_STRATEGY: follow Replan Protocol (see below), increment replan_count
 5. Policy violation → emit `policy_violation`, STOP
 6. All PASS → emit `phase_completed`, proceed
+
+### Interrupt Recovery Protocol
+
+When restarting an interrupted run (manifest.json exists), derive state from journal.jsonl:
+
+1. **Locate Safe Anchor**: Scan journal.jsonl sequentially. Identify the last `phase_completed` event. The phase immediately following this anchor is the Target Resume Phase.
+2. **Restore Counters**: Filter journal.jsonl for events in the Target Resume Phase. Count `checkpoint_failed` events to restore `retry_count`. Count `strategy_invalidated` events across the run to restore `replan_count`.
+3. **Sanitize Workspace**: Retain artifacts from completed phases. Ignore artifacts from the Target Resume Phase (they may be partial or unverified — the phase will regenerate them).
+4. **Restart from Step A**: Begin execution at the Target Resume Phase, running Consume Verification first.
+
+### Replan Protocol
+
+When a checkpoint gate returns FAIL_STRATEGY:
+
+1. Extract failure reason from the gate output
+2. Append `strategy_invalidated` event to journal
+3. Provide replan_context (previous strategy + failure reason) to strategy-prompt.md
+4. Strategy-prompt.md must produce a [REPLAN ANALYSIS] comment in the new strategy, explaining:
+   - Why the previous strategy failed
+   - What concrete changes were made to avoid that failure
+5. Save new strategy, reset retry_count for the current phase, resume execution from Phase 1
 
 ### Phase 3: Final Self-Review
 
@@ -129,7 +153,7 @@ phase_timeout: 30m
 max_total_runtime: 120m
 ```
 
-Policy is the Governance Primitive. It does not generate artifacts or events. Its sole responsibility is to stop the runtime. Never add approval/notification/UI fields here.
+Policy is the Governance Primitive. It does not generate artifacts or events. Its sole responsibility is to stop the runtime.
 
 ### manifest.json
 
@@ -159,9 +183,9 @@ manifest is an index, not a state store. Current phase is derived from journal e
 
 ## References
 
-- `references/decisions.md` — architecture decision records (ADRs)
-- `references/strategy-prompt.md` — strategy generation prompt
-- `references/checkpoint-gate-prompt.md` — typed constraint verification with policy enforcement
-- `references/self-review-prompt.md` — final review against manifest + journal + artifacts
-- `references/policy.md` — policy specification and enforcement rules
+- `references/decisions.md` — ADRs
+- `references/strategy-prompt.md` — strategy generation (with replan mode)
+- `references/checkpoint-gate-prompt.md` — constraint verification with policy enforcement
+- `references/self-review-prompt.md` — final review
+- `references/policy.md` — policy spec and enforcement
 - StraTA paper: arxiv.org/abs/2605.06642

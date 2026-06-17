@@ -14,6 +14,10 @@ You are about to execute a complex multi-phase task. Before any action, generate
 
 **Work directory:** .runs/{run_id}/
 
+<!-- REPLAN_CONTEXT_START — only present when replanning -->
+{replan_context}
+<!-- REPLAN_CONTEXT_END -->
+
 Your strategy must declare:
 1. **Goal** — one sentence: what success looks like
 2. **Constraints** — typed, verifiable. Each has: id, type (metric|semantic|script|regex|tool), condition, verify method
@@ -51,11 +55,34 @@ Rules:
 - Format/quality checks use `semantic` type
 - File pattern checks use `regex` type
 
+---
+
+## REPLANNING MODE
+
+If `replan_context` is present (previous strategy failed), you MUST:
+
+1. **Analyze the failure**: Read the previous strategy and failure reason. Write 1-2 sentences on WHY it failed.
+2. **State your fix**: Explicitly say what you changed to avoid that failure path.
+
+Output this analysis as a comment block BEFORE the strategy:
+
+```yaml
+# [REPLAN ANALYSIS]
+# Why it failed: <your analysis>
+# What changed: <your concrete fix>
+---
+# <strategy.yaml follows>
+```
+
+Do NOT output a strategy that is structurally identical to the failed one. If the failure reason suggests the task itself is impossible, say so explicitly in the analysis instead of generating another doomed strategy.
+
+---
+
 After outputting the strategy:
 1. Save as `.runs/{run_id}/strategy.yaml`
-2. Write `policy.yaml` with defaults: max_retry=3, max_replan=2, phase_timeout=30m, max_total_runtime=120m
-3. Create `manifest.json` with run metadata
-4. Create `journal.jsonl` with `run_started` event
-5. Create `artifacts/` directory
+2. If this is not a replan: write `policy.yaml` with defaults
+3. Create/update `manifest.json` with run metadata
+4. Append `run_started` or `strategy_invalidated` event to journal
+5. Create `artifacts/` directory if not exists
 
 Do not execute any phase actions yet.

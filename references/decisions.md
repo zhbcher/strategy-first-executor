@@ -33,14 +33,13 @@ Status: Accepted
 
 ## Context
 
-Policy (retry limits, timeouts, replan bounds) was initially treated as a peer to the five core primitives (Run, Strategy, Artifact, Constraint, Event). This created confusion: Policy does not generate artifacts, does not emit events, and does not participate in the execution data flow.
+Policy (retry limits, timeouts, replan bounds) was initially treated as a peer to the five core primitives. This created confusion: Policy does not generate artifacts, does not emit events, and does not participate in the execution data flow.
 
 ## Decision
 
 The system has 5 Core Primitives (data objects) and 1 Governance Primitive (controller):
-
-Core: Run, Strategy, Artifact, Constraint, Event
-Governance: Policy
+- Core: Run, Strategy, Artifact, Constraint, Event
+- Governance: Policy
 
 Policy wraps the runtime. It is not part of the data flow.
 
@@ -48,7 +47,7 @@ Policy wraps the runtime. It is not part of the data flow.
 
 - Policy must not generate artifacts
 - Policy must not write journal events (violations are logged by the guard, not by Policy itself)
-- Policy fields are limited to stopping conditions (retry, timeout, replan) — never approval, notification, or UI concerns
+- Policy fields are limited to stopping conditions — never approval, notification, or UI
 
 ---
 
@@ -100,7 +99,7 @@ Status: Accepted
 
 ## Context
 
-Phases declare `consume` artifacts in strategy.yaml, but no mechanism enforced that these artifacts actually exist before the phase begins. A missing input artifact could cause silent failure.
+Phases declare `consume` artifacts in strategy.yaml, but no mechanism enforced that these artifacts actually exist before the phase begins.
 
 ## Decision
 
@@ -115,3 +114,55 @@ Both conditions must pass. Failure emits `consume_validation_failed` and stops t
 - Required: consume verification step before every phase (no skip)
 - Required: consume_validation_failed is a terminal event
 - Required: manifest must list all artifacts that any phase may consume
+
+---
+
+# ADR-006: Interrupt Recovery From Journal
+
+Date: 2026-06-17
+Status: Accepted
+
+## Context
+
+System crashes or session restarts could happen mid-phase. Without a defined recovery protocol, partial artifacts could corrupt downstream phases, and retry/replan counters would be lost.
+
+## Decision
+
+Recovery follows a 4-step protocol derived entirely from journal.jsonl:
+1. Find last `phase_completed` event → safe anchor
+2. Count `checkpoint_failed` events after anchor → restore retry_count
+3. Ignore artifacts from interrupted phase → they will be regenerated
+4. Restart from Step A (Consume Verification) of the target phase
+
+No state is stored outside the journal.
+
+## Consequences
+
+- Resume never trusts partial artifacts from interrupted phases
+- retry_count and replan_count are always recoverable from journal
+- No new primitive or file needed — journal alone is sufficient
+
+---
+
+# ADR-007: Replan Requires Failure Reflection
+
+Date: 2026-06-17
+Status: Accepted
+
+## Context
+
+FAIL_STRATEGY triggered strategy regeneration, but the new strategy could repeat the same structural error, wasting replan attempts.
+
+## Decision
+
+Every replan must include a [REPLAN ANALYSIS] comment block in the new strategy.yaml, stating:
+- Why the previous strategy failed
+- What concrete changes were made to avoid that failure
+
+This is enforced by strategy-prompt.md, not by a separate mechanism.
+
+## Consequences
+
+- replan_context (previous strategy + failure reason) must be passed to strategy-prompt.md
+- New strategy.yaml must contain a [REPLAN ANALYSIS] block when is_replan=true
+- No new primitive — this is a constraint on Strategy generation, not a new concept

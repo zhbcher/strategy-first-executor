@@ -42,7 +42,8 @@ FAIL_STRATEGY → replan_count++
     emit policy_violation event
     STOP
   else:
-    regenerate strategy
+    prepare replan_context (previous strategy + failure reason)
+    call strategy-prompt.md with replan_context
     reset retry_count for new execution
 ```
 

@@ -84,8 +84,10 @@ Fix issues. Re-run from Step 0.
 **FAIL_STRATEGY:**
 ```
 replan_count++
-Write strategy_invalidated event
-Regenerate strategy from Phase 1
+Write strategy_invalidated event with failure_reason
+Prepare replan_context = {is_replan: true, previous_strategy: <strategy.yaml>, failure_reason: <reason>}
+Call strategy-prompt.md with replan_context
+Reset retry_count for new execution
 ```
 
 Do not discuss. Execute the protocol.
